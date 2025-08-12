@@ -1,4 +1,3 @@
-# coding: utf-8
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, font
 from PIL import Image, ImageTk
@@ -34,12 +33,10 @@ if not os.path.exists(IMAGE_FOLDER):
 if not os.path.exists(RECORDING_FOLDER):
     os.makedirs(RECORDING_FOLDER)
 
-
 # ====================================================================
 # --- ตัวแปรและฟังก์ชันสำหรับส่วน Image Counter (ตรวจจับการ์ด) ---
 # ====================================================================
 
-# ตัวแปรสำหรับควบคุมการทำงานของ Image Counter
 umasu_stop_event = threading.Event()
 umasu_thread = None
 images_config = []
@@ -60,16 +57,11 @@ try:
 except FileNotFoundError:
     pass
 
-# กำหนดชื่อไฟล์ภาพที่จะใช้สำหรับเงื่อนไขรีเซ็ต
 reset_image_name = 'restart.png'
-
-# กำหนดค่าคงที่สำหรับ Feature Matching
 MIN_MATCH_COUNT = 15
 orb = cv2.ORB_create(nfeatures=2000, scoreType=cv2.ORB_FAST_SCORE)
-
 templates = {}
 reset_template = None
-
 
 def save_config():
     """บันทึกการตั้งค่าการ์ดลงในไฟล์"""
@@ -98,7 +90,6 @@ def load_templates():
         reset_template = cv2.imread(reset_path, cv2.IMREAD_GRAYSCALE)
     else:
         messagebox.showerror("ข้อผิดพลาด", f"ไม่พบไฟล์รูปภาพ '{reset_image_name}'")
-
 
 def count_image_on_screen_orb(template_img):
     """จับภาพหน้าจอและนับจำนวนครั้งที่พบภาพต้นแบบด้วย ORB และ Homography"""
@@ -134,14 +125,13 @@ def count_image_on_screen_orb(template_img):
     
     return 0, None
 
-
 def run_umasu_main_loop():
     """ฟังก์ชันหลักที่ทำงานใน Background Thread"""
     while not umasu_stop_event.is_set():
         if reset_template is not None:
             current_reset_found, _ = count_image_on_screen_orb(reset_template)
             if current_reset_found > 0:
-                root.after(0, lambda: umasu_status_label.config(text=f"รีเซ็ต!", style="Error.TLabel"))
+                root.after(0, lambda: umasu_status_label.config(text="สถานะ: กำลังรีเซ็ต...", style="Warning.TLabel"))
                 for img_config in images_config:
                     img_config['found'] = 0
                 root.after(0, update_umasu_gui)
@@ -166,15 +156,14 @@ def run_umasu_main_loop():
                         if current_time - img_config['last_found_time'] > 2.0:
                             img_config['found'] += current_found
                             img_config['last_found_time'] = current_time
-                
+            
             if img_config['found'] < img_config['required']:
                 all_conditions_met = False
         
         root.after(100, update_umasu_gui)
         
         if all_conditions_met and images_config:
-            root.after(0, lambda: umasu_status_label.config(text="พบครบแล้ว!", style="Success.TLabel"))
-            # แทนที่ pyautogui.keyDown('f8') ด้วยการหยุดการทำงาน
+            root.after(0, lambda: umasu_status_label.config(text="สถานะ: พบครบแล้ว!", style="Success.TLabel"))
             umasu_stop_event.set() 
             root.after(0, update_umasu_status_after_stop)
             break
@@ -187,11 +176,17 @@ def run_umasu_main_loop():
 def update_umasu_gui():
     """อัปเดตค่าในหน้าต่าง GUI"""
     for img_config in images_config:
-        img_config['label'].config(text=f"มี: {img_config['found']}/{img_config['required']} ใบ")
+        if img_config.get('label'):
+            img_config['label'].config(text=f"พบแล้ว: {img_config['found']}/{img_config['required']}")
+            # เปลี่ยนสีข้อความเมื่อพบครบ
+            if img_config['found'] >= img_config['required']:
+                img_config['label'].config(style="CardText.Success.TLabel")
+            else:
+                img_config['label'].config(style="CardText.TLabel")
 
 def update_umasu_status_after_stop():
     """อัปเดตสถานะเมื่อโปรแกรมหยุดการทำงาน"""
-    umasu_status_label.config(text="หยุดการทำงาน", style="Default.TLabel")
+    umasu_status_label.config(text="สถานะ: หยุดการทำงาน", style="Default.TLabel")
     umasu_start_button.config(state=tk.NORMAL)
     umasu_stop_button.config(state=tk.DISABLED)
     save_config()
@@ -212,7 +207,7 @@ def start_umasu_program():
         umasu_thread = threading.Thread(target=run_umasu_main_loop)
         umasu_thread.daemon = True
         umasu_thread.start()
-        umasu_status_label.config(text="กำลังค้นหา...", style="Info.TLabel")
+        umasu_status_label.config(text="สถานะ: กำลังค้นหา...", style="Info.TLabel")
         umasu_start_button.config(state=tk.DISABLED)
         umasu_stop_button.config(state=tk.NORMAL)
 
@@ -247,6 +242,9 @@ def upload_card():
 
 def add_card_to_gui(file_name, required_count):
     """เพิ่มการ์ดใหม่ลงในโครงสร้างข้อมูลและสร้าง widget ใน GUI"""
+    if any(config['name'] == file_name for config in images_config):
+        return
+        
     new_card_config = {
         'name': file_name,
         'required': required_count,
@@ -257,9 +255,6 @@ def add_card_to_gui(file_name, required_count):
         'entry': None,
         'last_found_time': 0
     }
-    if any(config['name'] == file_name for config in images_config):
-        return
-        
     images_config.append(new_card_config)
     render_images_frame()
     load_templates()
@@ -267,6 +262,10 @@ def add_card_to_gui(file_name, required_count):
 
 def remove_card(card_config_to_remove):
     """ลบการ์ดที่เลือกออกจากรายการและ GUI"""
+    response = messagebox.askyesno("ยืนยันการลบ", f"คุณต้องการลบการ์ด '{card_config_to_remove['name']}' ใช่หรือไม่?\nไฟล์รูปภาพจะถูกลบไปด้วย")
+    if not response:
+        return
+
     if card_config_to_remove in images_config:
         file_to_remove = os.path.join(IMAGE_FOLDER, card_config_to_remove['name'])
         if os.path.exists(file_to_remove):
@@ -286,7 +285,7 @@ def render_images_frame():
     for widget in umasu_images_frame.winfo_children():
         widget.destroy()
 
-    columns = 3
+    columns = 4 # เพิ่มจำนวนคอลัมน์เพื่อให้กระทัดรัดขึ้น
     for i, img_config in enumerate(images_config):
         frame = ttk.Frame(umasu_images_frame, style="Card.TFrame")
         frame.grid(row=i//columns, column=i%columns, padx=10, pady=10, sticky="nsew")
@@ -294,43 +293,42 @@ def render_images_frame():
         
         full_path = os.path.join(IMAGE_FOLDER, img_config['name'])
         try:
-            pil_image = Image.open(full_path)
-            pil_image = pil_image.resize((100, 100), Image.LANCZOS)
-            photo = ImageTk.PhotoImage(pil_image)
-            img_config['photo'] = photo
-        
-            img_label = ttk.Label(frame, image=photo, style="CardImage.TLabel")
-            img_label.pack(pady=(10, 5))
-        except FileNotFoundError:
-            img_label = ttk.Label(frame, text=f"ไม่พบไฟล์\n{img_config['name']}", font=thai_font, style="Error.TLabel", anchor="center")
-            img_label.pack(pady=(10, 5))
+            with Image.open(full_path) as pil_image:
+                pil_image = pil_image.resize((100, 100), Image.LANCZOS)
+                photo = ImageTk.PhotoImage(pil_image)
+                img_config['photo'] = photo
             
-        count_frame = ttk.Frame(frame, style="Card.TFrame")
-        count_frame.pack()
+            img_label = ttk.Label(frame, image=photo, style="Card.TLabel")
+            img_label.pack(pady=(10, 5))
+        except (FileNotFoundError, IOError):
+            img_label = ttk.Label(frame, text=f"ไม่พบไฟล์\n{img_config['name']}", style="Error.TLabel", anchor="center", justify="center")
+            img_label.pack(pady=(10, 5), padx=10, fill="both", expand=True)
+            
+        count_frame = ttk.Frame(frame, style="Card.Inner.TFrame")
+        count_frame.pack(pady=5, padx=10)
         
-        ttk.Label(count_frame, text="ต้องการ:", font=thai_font, style="CardText.TLabel").pack(side=tk.LEFT, padx=(5, 2))
+        ttk.Label(count_frame, text="ต้องการ:", style="CardText.TLabel").pack(side=tk.LEFT, padx=(5, 2))
         
         required_var = tk.StringVar(value=str(img_config['required']))
-        required_entry = ttk.Entry(count_frame, width=5, textvariable=required_var, font=thai_font, justify="center")
+        required_entry = ttk.Entry(count_frame, width=5, textvariable=required_var, justify="center")
         required_entry.pack(side=tk.LEFT, padx=(0, 5))
         img_config['entry'] = required_entry
         
-        text_label = ttk.Label(frame, text=f"มี: {img_config['found']}/{img_config['required']} ใบ", font=thai_font_bold, style="CardText.TLabel")
+        text_label = ttk.Label(frame, text=f"พบแล้ว: {img_config['found']}/{img_config['required']}", style="CardText.TLabel")
         text_label.pack(pady=5)
         img_config['label'] = text_label
         
         remove_button = ttk.Button(frame, text="ลบ", command=lambda config=img_config: remove_card(config), style="Danger.TButton")
-        remove_button.pack(pady=5, padx=10, fill=tk.X)
+        remove_button.pack(pady=(5,10), padx=10, fill=tk.X)
     
     if not images_config:
-        empty_label = ttk.Label(umasu_images_frame, text="ยังไม่มีการ์ด\nโปรดอัปโหลดหรือเพิ่มการ์ดใหม่", font=thai_font_title, style="Info.TLabel", justify="center")
-        empty_label.pack(expand=True)
+        empty_label = ttk.Label(umasu_images_frame, text="ยังไม่มีการ์ด\nคลิก 'อัปโหลดการ์ด' เพื่อเริ่มต้น", font=FONT_TITLE, style="Placeholder.TLabel", justify="center")
+        empty_label.pack(expand=True, padx=20, pady=20)
     
     for i in range((len(images_config) + columns - 1) // columns):
         umasu_images_frame.grid_rowconfigure(i, weight=1)
     for i in range(columns):
         umasu_images_frame.grid_columnconfigure(i, weight=1)
-
 
 # ====================================================================
 # --- ตัวแปรและฟังก์ชันสำหรับส่วน Macro Recorder (บันทึกการกระทำ) ---
@@ -383,11 +381,11 @@ def recording_countdown_tick(seconds_left):
         return
         
     if seconds_left > 0:
-        macro_countdown_label.config(text=f"กำลังจะเริ่มบันทึกใน {seconds_left} วินาที...", style="MacroCountdown.TLabel")
+        macro_countdown_label.config(text=f"เริ่มบันทึกใน {seconds_left} วินาที...")
         countdown_id = root.after(1000, recording_countdown_tick, seconds_left - 1)
     else:
-        macro_countdown_label.config(text="กำลังบันทึก...", style="MacroCountdown.TLabel")
-        macro_status_label.config(text="สถานะ: กำลังบันทึก", style="MacroStatus.Recording.TLabel")
+        macro_countdown_label.config(text=" ")
+        macro_status_label.config(text="🔴 กำลังบันทึก", style="Status.Recording.TLabel")
         
         actions = []
         start_time = time.time()
@@ -399,7 +397,6 @@ def recording_countdown_tick(seconds_left):
         keyboard_listener.start()
         print(">>> เริ่มการบันทึกเมาส์และคีย์บอร์ด...")
 
-
 def start_recording():
     """ฟังก์ชันสำหรับการเริ่มบันทึกจากปุ่ม GUI และคีย์ลัด"""
     global is_recording, countdown_id
@@ -408,7 +405,7 @@ def start_recording():
         return
     is_recording = True
     update_ui_for_recording()
-    recording_countdown_tick(10)
+    recording_countdown_tick(5) # ลดเวลานับถอยหลัง
     print(">>> เตรียมบันทึกเมาส์และคีย์บอร์ด...")
 
 def stop_recording():
@@ -457,9 +454,10 @@ def replay_countdown_tick(seconds_left, filename):
         return
         
     if seconds_left > 0:
-        macro_countdown_label.config(text=f"กำลังจะเริ่มเล่นซ้ำใน {seconds_left} วินาที...", style="MacroCountdown.TLabel")
+        macro_countdown_label.config(text=f"เริ่มเล่นซ้ำใน {seconds_left} วินาที...")
         countdown_id = root.after(1000, replay_countdown_tick, seconds_left - 1, filename)
     else:
+        macro_countdown_label.config(text=" ")
         replay_thread = threading.Thread(target=run_replay, args=(filename,))
         replay_thread.start()
 
@@ -483,7 +481,7 @@ def run_replay(filename):
     original_pause = pyautogui.PAUSE
     pyautogui.PAUSE = 0
     
-    root.after(0, lambda: macro_countdown_label.config(text="กำลังเล่นซ้ำ...", style="MacroCountdown.TLabel"))
+    root.after(0, lambda: macro_status_label.config(text="▶️ กำลังเล่นซ้ำ", style="Status.Replaying.TLabel"))
     
     while is_replaying and not replay_stop_event.is_set():
         last_time = 0
@@ -537,7 +535,7 @@ def start_replay_with_dialog():
     is_replaying = True
     update_ui_for_replaying()
     
-    replay_countdown_tick(10, filename)
+    replay_countdown_tick(5, filename) # ลดเวลานับถอยหลัง
     print(f">>> เตรียมเล่นซ้ำเมาส์จากไฟล์: {filename} ...")
 
 def stop_replay_action():
@@ -567,180 +565,236 @@ def cancel_action():
     print(">>> ปิดโปรแกรม")
 
 # ฟังก์ชันจัดการคีย์ลัดให้ Thread-safe
-def hotkey_start_recording():
-    root.after(0, start_recording)
-
-def hotkey_stop_recording():
-    root.after(0, stop_recording)
-
-def hotkey_start_replay():
-    root.after(0, start_replay_with_dialog)
-
-def hotkey_stop_replay():
-    root.after(0, stop_replay_action)
-
-def hotkey_cancel_action():
-    root.after(0, cancel_action)
+def hotkey_start_recording(): root.after(0, start_recording)
+def hotkey_stop_recording(): root.after(0, stop_recording)
+def hotkey_start_replay(): root.after(0, start_replay_with_dialog)
+def hotkey_stop_replay(): root.after(0, stop_replay_action)
+def hotkey_cancel_action(): root.after(0, cancel_action)
 
 def update_ui_for_recording():
     macro_record_button.config(state=tk.DISABLED)
     macro_replay_button.config(state=tk.DISABLED)
-    macro_status_label.config(text="สถานะ: กำลังเตรียมการ...", style="MacroStatus.Recording.TLabel")
-    macro_countdown_label.config(text="", style="MacroCountdown.Recording.TLabel")
+    macro_status_label.config(text=" ", style="Status.Recording.TLabel")
+    macro_countdown_label.config(text="เตรียมบันทึก...", style="Countdown.TLabel")
 
 def update_ui_for_replaying():
     macro_record_button.config(state=tk.DISABLED)
     macro_replay_button.config(state=tk.DISABLED)
-    macro_status_label.config(text="สถานะ: กำลังเตรียมการ...", style="MacroStatus.Replaying.TLabel")
-    macro_countdown_label.config(text="", style="MacroCountdown.Replaying.TLabel")
+    macro_status_label.config(text=" ", style="Status.Replaying.TLabel")
+    macro_countdown_label.config(text="เตรียมเล่นซ้ำ...", style="Countdown.TLabel")
 
 def update_ui_for_idle():
     macro_record_button.config(state=tk.NORMAL)
     macro_replay_button.config(state=tk.NORMAL)
-    macro_status_label.config(text="สถานะ: พร้อมใช้งาน", style="MacroStatus.Idle.TLabel")
-    macro_countdown_label.config(text="", style="MacroCountdown.Default.TLabel")
+    macro_status_label.config(text="✅ พร้อมใช้งาน", style="Status.Idle.TLabel")
+    macro_countdown_label.config(text="", style="Countdown.TLabel")
 
 
 # ====================================================================
 # --- การสร้างหน้าต่างหลักและ UI ---
 # ====================================================================
 
-root = tk.Tk()
-root.title("UMA Tool - AIO")
-root.geometry("1000x700")
+# --- Color Palette & Fonts ---
+COLOR_PRIMARY = "#0078D4"
+COLOR_PRIMARY_HOVER = "#005A9E"
+COLOR_DANGER = "#D32F2F"
+COLOR_DANGER_HOVER = "#C62828"
+COLOR_SUCCESS = "#2E7D32"
+COLOR_WARNING = "#FF8F00"
+COLOR_INFO = "#0288D1"
+COLOR_BG = "#F0F0F0" # Background
+COLOR_FRAME_BG = "#FFFFFF"
+COLOR_TEXT = "#212121"
+COLOR_TEXT_SECONDARY = "#757575"
 
-# กำหนด Style และ Font
-style = ttk.Style(root)
-style.theme_use('vista') # หรือ 'clam', 'alt', 'default'
-thai_font = font.Font(family="Tahoma", size=10)
-thai_font_bold = font.Font(family="Tahoma", size=12, weight="bold")
-thai_font_title = font.Font(family="Tahoma", size=14, weight="bold")
+FONT_FAMILY = "Tahoma"
+FONT_NORMAL = (FONT_FAMILY, 10)
+FONT_BOLD = (FONT_FAMILY, 10, "bold")
+FONT_TITLE = (FONT_FAMILY, 16, "bold")
+FONT_STATUS = (FONT_FAMILY, 12, "bold")
+FONT_NOTE = (FONT_FAMILY, 9)
 
-style.configure("TLabel", font=thai_font)
-style.configure("TButton", font=thai_font_bold)
-style.configure("TEntry", font=thai_font)
-style.configure("TNotebook.Tab", font=thai_font_bold)
+def setup_styles(root):
+    """ตั้งค่า Theme และ Style ทั้งหมดของ ttk"""
+    style = ttk.Style(root)
+    style.theme_use('clam')
 
-# Style สำหรับสถานะ
-style.configure("Default.TLabel", foreground="#000")
-style.configure("Info.TLabel", foreground="#3498db")
-style.configure("Success.TLabel", foreground="#2ecc71")
-style.configure("Error.TLabel", foreground="#e74c3c")
-# Style สำหรับ Macro Status
-style.configure("MacroStatus.Idle.TLabel", foreground="#27ae60", font=("Arial", 12))
-style.configure("MacroStatus.Recording.TLabel", foreground="#e74c3c", font=("Arial", 12))
-style.configure("MacroStatus.Replaying.TLabel", foreground="#2980b9", font=("Arial", 12))
-# Style สำหรับ Macro Countdown
-style.configure("MacroCountdown.Recording.TLabel", foreground="blue", font=("Arial", 12, "bold"))
-style.configure("MacroCountdown.Replaying.TLabel", foreground="red", font=("Arial", 12, "bold"))
-style.configure("MacroCountdown.Default.TLabel", foreground="black", font=("Arial", 12, "bold"))
+    # General Styles
+    style.configure(".", background=COLOR_BG, foreground=COLOR_TEXT, font=FONT_NORMAL)
+    style.configure("TFrame", background=COLOR_BG)
+    style.configure("TLabel", background=COLOR_BG, foreground=COLOR_TEXT, font=FONT_NORMAL)
+    style.configure("TEntry", fieldbackground=COLOR_FRAME_BG, font=FONT_NORMAL)
 
-# Style สำหรับการ์ด
-style.configure("Card.TFrame", background="#FFFFFF", relief="solid", borderwidth=1)
-style.configure("CardImage.TLabel", background="#FFFFFF")
-style.configure("CardText.TLabel", background="#ecf0f1", foreground="#2c3e50")
-style.configure("Danger.TButton", foreground="black", background="#e74c3c")
-style.map("Danger.TButton",
-          background=[('pressed', '!disabled', '#c0392b'), ('active', '#e74c3c')],
-          foreground=[('pressed', '!disabled', 'black'), ('active', 'black')])
+    # Notebook Style
+    style.configure("TNotebook", background=COLOR_BG, borderwidth=0)
+    style.configure("TNotebook.Tab", font=FONT_BOLD, padding=[10, 5], background=COLOR_BG, borderwidth=0)
+    style.map("TNotebook.Tab", 
+              background=[("selected", COLOR_FRAME_BG), ("!selected", COLOR_BG)],
+              foreground=[("selected", COLOR_PRIMARY), ("!selected", COLOR_TEXT_SECONDARY)])
 
-# สร้าง Notebook สำหรับจัดการแท็บ
-notebook = ttk.Notebook(root)
-notebook.pack(expand=True, fill="both", padx=10, pady=10)
-
-# --- แท็บที่ 1: Image Counter ---
-umasu_frame = ttk.Frame(notebook)
-notebook.add(umasu_frame, text="ตรวจจับการ์ด (Image Counter)")
-
-# Header Frame
-umasu_header_frame = ttk.Frame(umasu_frame, padding="10")
-umasu_header_frame.pack(fill=tk.X)
-ttk.Label(umasu_header_frame, text="Image Counter & Automator Pro", font=thai_font_title).pack(side=tk.LEFT)
-umasu_status_label = ttk.Label(umasu_header_frame, text="หยุดการทำงาน", font=thai_font_bold, style="Default.TLabel")
-umasu_status_label.pack(side=tk.RIGHT)
-
-# Scrollable Frame สำหรับการ์ด
-umasu_container_frame = ttk.Frame(umasu_frame)
-umasu_container_frame.pack(fill="both", expand=True, padx=10, pady=10)
-umasu_canvas = tk.Canvas(umasu_container_frame, highlightthickness=0)
-umasu_scrollbar = ttk.Scrollbar(umasu_container_frame, orient="vertical", command=umasu_canvas.yview)
-umasu_images_frame = ttk.Frame(umasu_canvas, style="Card.TFrame")
-
-umasu_images_frame.bind(
-    "<Configure>",
-    lambda e: umasu_canvas.configure(
-        scrollregion=umasu_canvas.bbox("all")
+    # Button Styles
+    style.configure("TButton", font=FONT_BOLD, padding=[10, 5], borderwidth=1, relief="flat", background=COLOR_PRIMARY, foreground=COLOR_FRAME_BG)
+    style.map("TButton",
+        background=[('pressed', '!disabled', COLOR_PRIMARY_HOVER), ('active', COLOR_PRIMARY_HOVER)],
+        relief=[('pressed', 'sunken')]
     )
-)
+    style.configure("Danger.TButton", background=COLOR_DANGER, foreground=COLOR_FRAME_BG)
+    style.map("Danger.TButton",
+        background=[('pressed', '!disabled', COLOR_DANGER_HOVER), ('active', COLOR_DANGER_HOVER)],
+    )
+    style.configure("Secondary.TButton", background=COLOR_TEXT_SECONDARY, foreground=COLOR_FRAME_BG)
+    style.map("Secondary.TButton",
+        background=[('pressed', '!disabled', "#616161"), ('active', "#616161")],
+    )
 
-umasu_canvas.create_window((0, 0), window=umasu_images_frame, anchor="nw")
-umasu_canvas.configure(yscrollcommand=umasu_scrollbar.set)
-umasu_canvas.pack(side="left", fill="both", expand=True)
-umasu_scrollbar.pack(side="right", fill="y")
+    # Status Label Styles
+    style.configure("Default.TLabel", foreground=COLOR_TEXT_SECONDARY, font=FONT_BOLD)
+    style.configure("Info.TLabel", foreground=COLOR_INFO, font=FONT_BOLD)
+    style.configure("Success.TLabel", foreground=COLOR_SUCCESS, font=FONT_BOLD)
+    style.configure("Warning.TLabel", foreground=COLOR_WARNING, font=FONT_BOLD)
+    style.configure("Error.TLabel", foreground=COLOR_DANGER, font=FONT_NORMAL)
+    style.configure("Placeholder.TLabel", foreground=COLOR_TEXT_SECONDARY, font=FONT_BOLD)
 
-# Footer/Control Frame
-umasu_controls_frame = ttk.Frame(umasu_frame, padding="10")
-umasu_controls_frame.pack(fill=tk.X, side=tk.BOTTOM)
-
-umasu_start_button = ttk.Button(umasu_controls_frame, text="Start", command=start_umasu_program, style="Accent.TButton")
-umasu_start_button.pack(side=tk.LEFT, padx=5, pady=5)
-
-umasu_stop_button = ttk.Button(umasu_controls_frame, text="Stop", command=stop_umasu_program, state=tk.DISABLED, style="Accent.TButton")
-umasu_stop_button.pack(side=tk.LEFT, padx=5, pady=5)
-
-umasu_upload_button = ttk.Button(umasu_controls_frame, text="อัปโหลดการ์ด", command=upload_card)
-umasu_upload_button.pack(side=tk.RIGHT, padx=5, pady=5)
-
-# โหลดภาพและสร้าง GUI เริ่มต้นสำหรับ Image Counter
-load_templates()
-render_images_frame()
+    # Card Styles
+    style.configure("Card.TFrame", background=COLOR_FRAME_BG, relief="solid", borderwidth=1, bordercolor="#E0E0E0")
+    style.configure("Card.TLabel", background=COLOR_FRAME_BG)
+    style.configure("Card.Inner.TFrame", background=COLOR_FRAME_BG)
+    style.configure("CardText.TLabel", background=COLOR_FRAME_BG, foreground=COLOR_TEXT, font=FONT_BOLD)
+    style.configure("CardText.Success.TLabel", background=COLOR_FRAME_BG, foreground=COLOR_SUCCESS, font=FONT_BOLD)
+    
+    # Macro Status Styles
+    style.configure("Status.Idle.TLabel", foreground=COLOR_SUCCESS, font=FONT_STATUS)
+    style.configure("Status.Recording.TLabel", foreground=COLOR_DANGER, font=FONT_STATUS)
+    style.configure("Status.Replaying.TLabel", foreground=COLOR_INFO, font=FONT_STATUS)
+    style.configure("Countdown.TLabel", foreground=COLOR_TEXT_SECONDARY, font=FONT_STATUS)
+    style.configure("Hotkey.TLabel", foreground=COLOR_TEXT_SECONDARY, font=FONT_NOTE)
 
 
-# --- แท็บที่ 2: Macro Recorder ---
-macro_frame = ttk.Frame(notebook)
-notebook.add(macro_frame, text="บันทึก/เล่นซ้ำ (Macro)")
+def create_image_counter_tab(notebook):
+    """สร้าง UI สำหรับแท็บ Image Counter"""
+    global umasu_frame, umasu_header_frame, umasu_status_label, umasu_container_frame
+    global umasu_canvas, umasu_scrollbar, umasu_images_frame, umasu_controls_frame
+    global umasu_start_button, umasu_stop_button, umasu_upload_button
 
-macro_inner_frame = ttk.Frame(macro_frame, padding="20")
-macro_inner_frame.pack(expand=True)
+    umasu_frame = ttk.Frame(notebook, padding="10")
+    umasu_frame.pack(fill="both", expand=True)
+    notebook.add(umasu_frame, text="  ตรวจจับการ์ด  ")
 
-macro_button_frame = ttk.Frame(macro_inner_frame)
-macro_button_frame.pack(pady=20)
+    # Header Frame
+    umasu_header_frame = ttk.Frame(umasu_frame, padding="10")
+    umasu_header_frame.pack(fill=tk.X)
+    ttk.Label(umasu_header_frame, text="Image Counter", font=FONT_TITLE).pack(side=tk.LEFT)
+    umasu_status_label = ttk.Label(umasu_header_frame, text="สถานะ: หยุดการทำงาน", style="Default.TLabel")
+    umasu_status_label.pack(side=tk.RIGHT, pady=5)
 
-macro_record_button = ttk.Button(macro_button_frame, text="บันทึก (F5)", command=start_recording)
-macro_record_button.grid(row=0, column=0, padx=10, pady=10)
+    # Scrollable Frame for cards
+    umasu_container_frame = ttk.Frame(umasu_frame)
+    umasu_container_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    
+    umasu_canvas = tk.Canvas(umasu_container_frame, highlightthickness=0, bg=COLOR_BG)
+    umasu_scrollbar = ttk.Scrollbar(umasu_container_frame, orient="vertical", command=umasu_canvas.yview)
+    umasu_images_frame = ttk.Frame(umasu_canvas, style="Card.TFrame")
+    
+    umasu_images_frame.bind(
+        "<Configure>",
+        lambda e: umasu_canvas.configure(scrollregion=umasu_canvas.bbox("all"))
+    )
 
-macro_replay_button = ttk.Button(macro_button_frame, text="เล่นซ้ำ (F7)", command=start_replay_with_dialog)
-macro_replay_button.grid(row=0, column=1, padx=10, pady=10)
+    umasu_canvas.create_window((0, 0), window=umasu_images_frame, anchor="nw")
+    umasu_canvas.configure(yscrollcommand=umasu_scrollbar.set)
+    umasu_canvas.pack(side="left", fill="both", expand=True)
+    umasu_scrollbar.pack(side="right", fill="y")
 
-macro_status_label = ttk.Label(macro_inner_frame, text="สถานะ: พร้อมใช้งาน", style="MacroStatus.Idle.TLabel")
-macro_status_label.pack(pady=10)
+    # Footer/Control Frame
+    umasu_controls_frame = ttk.Frame(umasu_frame, padding="10")
+    umasu_controls_frame.pack(fill=tk.X, side=tk.BOTTOM)
 
-macro_countdown_label = ttk.Label(macro_inner_frame, text="", style="MacroCountdown.Default.TLabel")
-macro_countdown_label.pack(pady=5)
+    umasu_start_button = ttk.Button(umasu_controls_frame, text="START", command=start_umasu_program)
+    umasu_start_button.pack(side=tk.LEFT, padx=5, pady=5)
+    
+    umasu_stop_button = ttk.Button(umasu_controls_frame, text="STOP", command=stop_umasu_program, state=tk.DISABLED, style="Secondary.TButton")
+    umasu_stop_button.pack(side=tk.LEFT, padx=5, pady=5)
+    
+    umasu_upload_button = ttk.Button(umasu_controls_frame, text="อัปโหลดการ์ด", command=upload_card, style="Secondary.TButton")
+    umasu_upload_button.pack(side=tk.RIGHT, padx=5, pady=5)
 
-hotkey_label = ttk.Label(macro_inner_frame, text="คีย์ลัด: บันทึก (F5), หยุดบันทึก (F6), เล่นซ้ำ (F7), หยุดเล่นซ้ำ (F8), ยกเลิก/ปิด (F9)", font=("Arial", 10), foreground="#555")
-hotkey_label.pack(pady=5)
 
-# --- สร้าง Hotkeys Listener ---
-hotkeys = {
-    '<f5>': hotkey_start_recording,
-    '<f6>': hotkey_stop_recording,
-    '<f7>': hotkey_start_replay,
-    '<f8>': hotkey_stop_replay,
-    '<f9>': hotkey_cancel_action
-}
-hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
-hotkey_listener.start()
+def create_macro_recorder_tab(notebook):
+    """สร้าง UI สำหรับแท็บ Macro Recorder"""
+    global macro_frame, macro_record_button, macro_replay_button
+    global macro_status_label, macro_countdown_label
 
-# ตรวจสอบว่า hotkey listener ทำงานอยู่หรือไม่
-try:
-    if hotkey_listener.is_alive():
-        print("Hotkey listener thread is running.")
-    else:
-        print("Hotkey listener thread is not running.")
-except Exception as e:
-    print(f"Failed to check hotkey listener thread status: {e}")
+    macro_frame = ttk.Frame(notebook, padding="20")
+    macro_frame.pack(fill="both", expand=True)
+    notebook.add(macro_frame, text="  บันทึก/เล่นซ้ำ  ")
 
-update_ui_for_idle()
+    macro_frame.grid_rowconfigure(0, weight=1)
+    macro_frame.grid_rowconfigure(3, weight=1)
+    macro_frame.grid_columnconfigure(0, weight=1)
+    
+    # Control Buttons Frame
+    control_frame = ttk.Frame(macro_frame)
+    control_frame.grid(row=1, column=0, pady=20)
+    
+    macro_record_button = ttk.Button(control_frame, text="บันทึก (F5)", command=start_recording)
+    macro_record_button.pack(side=tk.LEFT, padx=10, ipady=10, ipadx=20)
 
-root.mainloop()
+    macro_replay_button = ttk.Button(control_frame, text="เล่นซ้ำ (F7)", command=start_replay_with_dialog)
+    macro_replay_button.pack(side=tk.LEFT, padx=10, ipady=10, ipadx=20)
+
+    # Status Display Frame
+    status_frame = ttk.Frame(macro_frame, style="Card.TFrame", padding=20)
+    status_frame.grid(row=2, column=0, pady=10, sticky="ew")
+    status_frame.columnconfigure(0, weight=1)
+
+    macro_status_label = ttk.Label(status_frame, text=" ", style="Status.Idle.TLabel", anchor="center")
+    macro_status_label.grid(row=0, column=0, pady=5)
+
+    macro_countdown_label = ttk.Label(status_frame, text="", style="Countdown.TLabel", anchor="center")
+    macro_countdown_label.grid(row=1, column=0, pady=5)
+
+    hotkey_info = "F5: เริ่มบันทึก  |  F6: หยุดบันทึก  |  F7: เล่นซ้ำ  |  F8: หยุดเล่นซ้ำ  |  F9: ปิดโปรแกรม"
+    hotkey_label = ttk.Label(macro_frame, text=hotkey_info, style="Hotkey.TLabel", anchor="center")
+    hotkey_label.grid(row=4, column=0, pady=(20, 0), sticky="s")
+
+
+# --- Main Application Execution ---
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("UMA Tool - AIO")
+    root.geometry("1000x750")
+    root.minsize(800, 600)
+    root.configure(bg=COLOR_BG)
+
+    # Setup styles
+    setup_styles(root)
+    
+    # Create Notebook for tabs
+    notebook = ttk.Notebook(root, style="TNotebook")
+    notebook.pack(expand=True, fill="both", padx=10, pady=10)
+
+    # Create Tabs
+    create_image_counter_tab(notebook)
+    create_macro_recorder_tab(notebook)
+    
+    # Initial load for Image Counter
+    load_templates()
+    render_images_frame()
+
+    # Initial UI state for Macro
+    update_ui_for_idle()
+
+    # Create Hotkeys Listener
+    hotkeys = {
+        '<f5>': hotkey_start_recording,
+        '<f6>': hotkey_stop_recording,
+        '<f7>': hotkey_start_replay,
+        '<f8>': hotkey_stop_replay,
+        '<f9>': hotkey_cancel_action
+    }
+    hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
+    hotkey_listener.start()
+
+    # Graceful shutdown
+    root.protocol("WM_DELETE_WINDOW", cancel_action)
+    root.mainloop()

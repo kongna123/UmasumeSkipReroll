@@ -48,7 +48,8 @@ try:
                 'frame': None, 
                 'photo': None, 
                 'label': None, 
-                'entry': None
+                'entry': None,
+                'last_found_time': 0 # เพิ่มตัวแปรสำหรับ Cooldown
             })
 except FileNotFoundError:
     pass
@@ -164,7 +165,15 @@ def run_main_loop():
                 template_img = templates.get(img_config['name'])
                 if template_img is not None:
                     current_found, _ = count_image_on_screen_orb(template_img)
-                    img_config['found'] += current_found
+                    
+                    # --- แก้ไขส่วนนี้เพื่อป้องกันการนับซ้ำ ---
+                    if current_found > 0:
+                        current_time = time.time()
+                        # กำหนดช่วงเวลา Cooldown 2 วินาที
+                        if current_time - img_config['last_found_time'] > 2.0:
+                            img_config['found'] += current_found
+                            img_config['last_found_time'] = current_time
+                    # --------------------------------------
             
             if img_config['found'] < img_config['required']:
                 all_conditions_met = False
@@ -203,6 +212,7 @@ def start_program():
     if thread is None or not thread.is_alive():
         for img_config in images_config:
             img_config['found'] = 0
+            img_config['last_found_time'] = 0 # รีเซ็ต Cooldown
         
         if not images_config:
             messagebox.showwarning("คำเตือน", "กรุณาเพิ่มการ์ดที่ต้องการค้นหาก่อน")
@@ -254,7 +264,8 @@ def add_card_to_gui(file_name, required_count):
         'frame': None,
         'photo': None,
         'label': None,
-        'entry': None
+        'entry': None,
+        'last_found_time': 0 # เพิ่มตัวแปรสำหรับ Cooldown
     }
     # ป้องกันการเพิ่มการ์ดซ้ำ
     if any(config['name'] == file_name for config in images_config):

@@ -5,7 +5,7 @@ a = Analysis(
     ['Umasuskip.py'],
     pathex=[],
     binaries=[],
-    datas=[('image/restart.png', 'image')],
+    datas=[('forest-dark.tcl', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

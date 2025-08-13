@@ -1,4 +1,3 @@
-# coding: utf-8
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, font
 from PIL import Image, ImageTk
@@ -15,7 +14,6 @@ import winsound
 from pynput import mouse, keyboard
 import ast
 
-# --- ฟังก์ชันแก้ไขเส้นทางสำหรับ PyInstaller ---
 def resource_path(relative_path):
     """
     Accepts a relative path and returns a correct path
@@ -27,17 +25,11 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-# --- Sound file path ---
 SOUND_FILE = resource_path("notification.wav")
 if not os.path.exists(SOUND_FILE):
     print(f"Error: Sound file not found at '{SOUND_FILE}'. Sound notifications will be disabled.")
     SOUND_FILE = None
 
-# ----------------------------------------------------------------------
-# GLOBAL VARIABLES AND CONSTANTS
-# ----------------------------------------------------------------------
-
-# --- Card Counter Global variables ---
 is_sound_muted = False
 is_accuracy_hidden = False
 card_stop_event = threading.Event()
@@ -45,12 +37,11 @@ card_thread = None
 IMAGE_FOLDER = resource_path("image")
 reset_image_name = 'restart.png'
 MIN_MATCH_COUNT = 10
-orb = cv2.ORB_create(nfeatures=5000, scoreType=cv2.ORB_FAST_SCORE)
+orb = cv2.ORB_create(nfeatures=10000, scoreType=cv2.ORB_FAST_SCORE)
 templates = {}
 reset_template = None
 images_config = []
 
-# --- Macro Automation Global variables ---
 actions = []
 is_recording = False
 is_replaying = False
@@ -61,22 +52,13 @@ start_time = None
 replay_thread = None
 recording_file = None
 countdown_id = None
-
-# Siganls for hotkey handling (Refactored for better signal management)
 stop_recording_signal = threading.Event()
 start_infinite_replay_signal = threading.Event()
 start_limited_replay_signal = threading.Event()
 stop_replay_signal = threading.Event()
 cancel_all_signal = threading.Event()
-
-# Replay speed settings
 MOUSE_MOVE_DURATION = 0.05
 REPLAY_SPEED_FACTOR = 1.0
-
-
-# ----------------------------------------------------------------------
-# COMMON UTILITY FUNCTIONS
-# ----------------------------------------------------------------------
 def show_custom_notification(title, message, parent_root):
     """
     Creates a simple custom Toplevel window to display a notification
@@ -86,14 +68,10 @@ def show_custom_notification(title, message, parent_root):
     popup.title(title)
     popup.config(padx=20, pady=20, bg="#2c3e50") # Dark background
     popup.grab_set()  # Make the popup modal
-
     label = ttk.Label(popup, text=message, font=thai_font_bold, justify=tk.CENTER, foreground="white", background="#2c3e50")
     label.pack(pady=10)
-
     ok_button = ttk.Button(popup, text="ตกลง", command=popup.destroy, style="Accent.TButton")
     ok_button.pack(pady=10)
-
-    # Center the popup window on the screen
     parent_root.update_idletasks()
     window_width = popup.winfo_width()
     window_height = popup.winfo_height()
@@ -103,10 +81,6 @@ def show_custom_notification(title, message, parent_root):
     y = (screen_height // 2) - (window_height // 2)
     popup.geometry(f"+{x}+{y}")
 
-
-# ----------------------------------------------------------------------
-# IMAGE COUNTER FUNCTIONS
-# ----------------------------------------------------------------------
 def play_notification_sound():
     """
     Plays the notification sound if the file is loaded successfully and sound is not muted.
@@ -156,52 +130,55 @@ def load_templates():
 
 def count_image_on_screen_orb(template_img):
     """
-    Captures a screenshot and counts how many times the template image is found
-    using ORB and Homography.
-    Returns a tuple: (count found, percentage accuracy).
+    ตรวจจับหลายใบในหน้าจอด้วย ORB และ Homography
+    คืนค่า (จำนวนที่พบ, ค่า accuracy เฉลี่ย)
     """
     sct = mss.mss()
     screen_shot = sct.grab(sct.monitors[0])
     screen_np = np.array(screen_shot)
     screen_gray = cv2.cvtColor(screen_np, cv2.COLOR_BGRA2GRAY)
 
-    found_count = 0
-    best_accuracy = 0
+    found_locations = []
+    accuracy_list = []
 
-    for scale in np.linspace(1.0, 0.2, 5): 
+    for scale in np.linspace(1.0, 0.3, 8):
         if template_img.shape[0] * scale < 20 or template_img.shape[1] * scale < 20:
             continue
-            
         scaled_template = cv2.resize(template_img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        
         kp1, des1 = orb.detectAndCompute(scaled_template, None)
         kp2, des2 = orb.detectAndCompute(screen_gray, None)
-        
         if des1 is None or des2 is None or len(des1) < MIN_MATCH_COUNT or len(des2) < MIN_MATCH_COUNT:
             continue
-            
         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
         matches = bf.match(des1, des2)
         matches = sorted(matches, key=lambda x: x.distance)
-        
-        good_matches = matches[:50]
-        
+        good_matches = matches[:30]  # ลดจำนวน match เพื่อความแม่นยำ
         if len(good_matches) >= MIN_MATCH_COUNT:
-            src_pts = np.float32([ kp1[m.queryIdx].pt for m in good_matches ]).reshape(-1, 1, 2)
-            dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good_matches ]).reshape(-1, 1, 2)
-            
-            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 4.0)
             if M is not None:
                 matches_mask = mask.ravel().tolist()
                 inliers = sum(matches_mask)
-                
                 if inliers >= MIN_MATCH_COUNT:
                     accuracy_percent = (inliers / len(good_matches)) * 100
-                    found_count = 1
-                    best_accuracy = max(best_accuracy, accuracy_percent)
-                    return found_count, best_accuracy
-    return found_count, best_accuracy
+                    # หา location ของ template ในหน้าจอ
+                    h, w = scaled_template.shape
+                    pts = np.float32([[0,0],[0,h-1],[w-1,h-1],[w-1,0]]).reshape(-1,1,2)
+                    dst = cv2.perspectiveTransform(pts, M)
+                    center = np.mean(dst, axis=0)[0]
+                    # ตรวจสอบว่า location ซ้ำกับที่เจอไปแล้วหรือไม่
+                    duplicate = False
+                    for loc in found_locations:
+                        if np.linalg.norm(center - loc) < max(h, w) * 0.7:
+                            duplicate = True
+                            break
+                    if not duplicate:
+                        found_locations.append(center)
+                        accuracy_list.append(accuracy_percent)
+    found_count = len(found_locations)
+    avg_accuracy = np.mean(accuracy_list) if accuracy_list else 0
+    return found_count, avg_accuracy
 
 def show_notification_message_card(card_name, accuracy_percent):
     """Function to display a notification window for the card counter."""
@@ -231,7 +208,7 @@ def run_card_main_loop():
                 for img_config in images_config:
                     img_config['found'] = 0
                 root.after(0, update_card_gui)
-                time.sleep(1)
+                time.sleep(0.1)  # ลดเวลาหน่วงให้ค้นหาต่อเร็วขึ้น
                 continue
         
         all_conditions_met = True
@@ -246,13 +223,12 @@ def run_card_main_loop():
                 template_img = templates.get(img_config['name'])
                 if template_img is not None:
                     current_found, accuracy = count_image_on_screen_orb(template_img)
-                    
                     if current_found > 0:
                         current_time = time.time()
                         if current_time - img_config['last_found_time'] > 2.0:
+                            # เพิ่มจำนวนที่พบทีละหลายใบ
                             img_config['found'] += current_found
                             img_config['last_found_time'] = current_time
-                            
                             root.after(0, lambda name=img_config['name'], acc=accuracy: show_notification_message_card(name, acc))
                             play_notification_sound()
                 
@@ -897,23 +873,17 @@ if __name__ == '__main__':
     load_templates()
     render_images_frame()
 
-    # ------------------------------------------------------------------
-    # TAB 2: MACRO AUTOMATION
-    # ------------------------------------------------------------------
     macro_tab = ttk.Frame(notebook)
     notebook.add(macro_tab, text="มาโครอัตโนมัติ")
     
-    # Use a cleaner frame for macro controls
     macro_control_frame = ttk.Frame(macro_tab, padding="20")
     macro_control_frame.pack(pady=20, fill=tk.BOTH, expand=True)
 
-    # Status labels
     macro_status_label = ttk.Label(macro_control_frame, text="สถานะ: พร้อมใช้งาน", font=thai_font_bold, style="Success.TLabel")
     macro_status_label.pack(pady=10)
     macro_countdown_label = ttk.Label(macro_control_frame, text="", font=thai_font_bold)
     macro_countdown_label.pack(pady=5)
 
-    # Buttons frame with grid layout
     macro_button_frame = ttk.Frame(macro_control_frame)
     macro_button_frame.pack(pady=20)
     
@@ -944,7 +914,6 @@ if __name__ == '__main__':
     macro_hotkey_label = ttk.Label(macro_control_frame, text="คีย์ลัด: F5 บันทึก | F6 หยุดบันทึก | F7 เล่นซ้ำวนลูป | F9 เล่นซ้ำตามจำนวน | F8 หยุดเล่นซ้ำ | F10 ยกเลิกการทำงานทั้งหมด", font=thai_font)
     macro_hotkey_label.pack(pady=5)
     
-    # --- Setup hotkeys for macro automation ---
     hotkeys = {
         '<f5>': hotkey_start_recording,
         '<f6>': hotkey_stop_recording,

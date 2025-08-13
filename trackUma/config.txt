@@ -1,4 +1,0 @@
-daiwa.png,0
-Kitasan.png,0
-sweep.png,0
-SuperCreek.png,0

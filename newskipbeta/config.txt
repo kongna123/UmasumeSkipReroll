@@ -1,0 +1,5 @@
+Kitasan.png,5
+SuperCreek.png,5
+sweep.png,5
+daiwa.png,5
+ManhantanCafe.png,5
